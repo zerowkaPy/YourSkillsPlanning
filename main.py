@@ -30,19 +30,19 @@ class Skill(BaseModel):
 async def get_skill(id:int):
     with engine.begin() as conn:
         result = conn.execute(text("SELECT * FROM user_skills WHERE id = :id"), {"id":id})
-        row = result.fetchone()
-        if not row:
-            return {}
-        
-        data = {
-            "name":row.name,
-            "time_slot":row.time_slot,
-        }
-
-        if row.target:
-            data.update(target=row.target)
-        return data
+    row = result.fetchone()
+    if not row:
+        return {}
     
+    data = {
+        "name":row.name,
+        "time_slot":row.time_slot,
+    }
+
+    if row.target:
+        data.update(target=row.target)
+    return data
+
 
 @app.get("/planning/skills")
 async def skills():
