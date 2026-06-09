@@ -1,30 +1,31 @@
 import logging
-import os
 import sys
 from typing import Annotated
 
-from dotenv import load_dotenv
 from fastapi import Body, FastAPI
-from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from sqladmin import Admin, ModelView
+
+import envs
+from db.sync_engine import engine
+from db.tables import Base, Skill
+from models.skill import SkillModel
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-load_dotenv(".env")
-check_url = DB_URL = os.getenv("DB_URL")
-if not check_url:
-    logging.error("Environment variable DB_URL wasn't imported")
-
-
 app = FastAPI()
+admin = Admin(app, engine)
 
-engine = create_engine(DB_URL, echo=True) # type: ignore
 
-class Skill(BaseModel):
-    name: str
-    time_slot: int  # days number
-    target: str | None = None
+class SkillsAdmin(ModelView, model=Skill):
+    name = "Skill"
+    name_plural = "Skills"
+    icon = "fa-solid fa-chart-bar"
+    column_list = [Skill.name, Skill.desc, Skill.weight]
 
+admin.add_view(SkillsAdmin)
+
+Base.metadata.create_all(engine)
 
 @app.get("/planning/skills/{id}")
 async def get_skill(id:int):
@@ -64,7 +65,7 @@ async def skills():
 
 
 @app.post("/planning/new-skills")
-async def new_skill(skill: Annotated[Skill, Body(embed=True)]):
+async def new_skill(skill: Annotated[SkillModel, Body(embed=True)]):
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO user_skills (name, time_slot, target) " \
         "VALUES(:name, :time_slot, :target)"), 
