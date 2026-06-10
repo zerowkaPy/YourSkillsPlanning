@@ -1,72 +1,32 @@
 import logging
 import sys
-from typing import Annotated
+from contextlib import asynccontextmanager
 
-from fastapi import Body, FastAPI
-from sqlalchemy import text
-from sqladmin import Admin, ModelView
+from fastapi import FastAPI
+from sqladmin import Admin
 
 import envs
 from db.sync_engine import engine
-from db.tables import Base, Skill
-from models.skill import SkillModel
+from db.tables import Base
+from skills.admin import SkillsAdmin
+from skills.managing import skill_router
+
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    Base.metadata.create_all(engine)
+    yield
+    Base.metadata.drop_all(engine)
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(skill_router)
+
 admin = Admin(app, engine)
-
-
-class SkillsAdmin(ModelView, model=Skill):
-    name = "Skill"
-    name_plural = "Skills"
-    icon = "fa-solid fa-chart-bar"
-    column_list = [Skill.name, Skill.desc, Skill.weight]
-
 admin.add_view(SkillsAdmin)
 
-Base.metadata.create_all(engine)
-
-@app.get("/planning/skills/{id}")
-async def get_skill(id:int):
-    with engine.begin() as conn:
-        result = conn.execute(text("SELECT * FROM user_skills WHERE id = :id"), {"id":id})
-    row = result.fetchone()
-    if not row:
-        return {}
-    
-    data = {
-        "name":row.name,
-        "time_slot":row.time_slot,
-    }
-
-    if row.target:
-        data.update(target=row.target)
-    return data
 
 
-@app.get("/planning/skills")
-async def skills():
-    with engine.begin() as conn:
-        result = conn.execute(text("SELECT * FROm user_skills"))
-
-    skills = {"skills":[]}
 
 
-    for row in result:  
-        skills["skills"].append(
-            {
-                "name":row.name,
-                "time_slot":row.time_slot,
-                "target":row.target
-            }
-        )
-    return skills
-
-
-@app.post("/planning/new-skills")
-async def new_skill(skill: Annotated[SkillModel, Body(embed=True)]):
-    with engine.begin() as conn:
-        conn.execute(text("INSERT INTO user_skills (name, time_slot, target) " \
-        "VALUES(:name, :time_slot, :target)"), 
-            {"name":skill.name, "time_slot":skill.time_slot, "target":skill.target})
