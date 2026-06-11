@@ -1,6 +1,6 @@
 import logging
 import sys
-from contextlib import asynccontextmanager
+# from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from sqladmin import Admin
@@ -15,15 +15,7 @@ from skills import managing, progress
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-@asynccontextmanager
-async def lifespan(app:FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.include_router(user_router)
 
 admin = Admin(app, engine)
