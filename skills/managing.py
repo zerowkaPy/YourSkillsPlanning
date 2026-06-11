@@ -1,26 +1,24 @@
 from typing import Annotated
+import asyncio
 
-from fastapi import APIRouter, Depends, Query, Path
+from fastapi import Depends, Query, Path
 from sqlalchemy import Result, select, insert, delete, update
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import aliased
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.tables import Skill
-from db.sync_engine import engine
+from db.tables import Skill, Progress, Relation
+from db.connect import get_db, SessionLocal
 from models.skill import SkillModel
+from route.routers import user_router
+from skills.relations import build_relations
 
-skill_router = APIRouter()
-
-SessionLocal = sessionmaker(engine)
-
-async def get_db():
-    with SessionLocal() as session:
-        yield session
-
-@skill_router.get("/skills/")
-async def get_all(session:Annotated[Session, Depends(get_db)]):
+@user_router.get("/skills/")
+async def get_all(session:Annotated[AsyncSession, Depends(get_db)]):
     stmt = select(Skill)
-    result:Result[tuple[Skill]] = session.execute(stmt)
+    result:Result[tuple[Skill]] = await session.execute(stmt)
     response = []
+    skills = []
+    skills_id = {}
     for row in result:
         skill = row[0]
         response.append(
@@ -30,23 +28,33 @@ async def get_all(session:Annotated[Session, Depends(get_db)]):
             "weight":skill.weight
             }
         )
+        skills.append(skill.name)
+        skills_id[skill.name] = skill.id
+        
+    asyncio.create_task(insert_relations(skills, skills_id))
     return response
 
-@skill_router.post("/skills/")
-async def create_skill(skill:SkillModel, session:Annotated[Session, Depends(get_db)]):
-    stmt = insert(Skill).values(
+@user_router.post("/skills/")
+async def create_skill(skill:SkillModel, session:Annotated[AsyncSession, Depends(get_db)]):
+    skill_stmt = insert(Skill).values(
         name=skill.name,
         desc=skill.desc,
-        weight=skill.weight)
+        weight=skill.weight).returning(Skill.id)
     
-    session.execute(stmt)
-    session.commit()
+    result = await session.execute(skill_stmt)
+    await session.commit()
+
+    skill_id = result.scalar_one()
+    progress_stmt = insert(Progress).values(skill_id=skill_id)
+    await session.execute(progress_stmt)
+    await session.commit()
+
     return "skill added"
 
 
-@skill_router.patch("/skills/{skill_name}")
+@user_router.patch("/skills/{skill_name}")
 async def edit_skill(
-    session:Annotated[Session, Depends(get_db)],
+    session:Annotated[AsyncSession, Depends(get_db)],
     skill_name:Annotated[str, Path(max_length=35)],
     name:Annotated[str|None, Query(max_length=35)] = None,
     desc:Annotated[str|None, Query(max_length=200)] = None,
@@ -61,14 +69,66 @@ async def edit_skill(
         values.update(weight=weight)
     stmt = update(Skill).where(Skill.name==skill_name).values(**values)
     
-    session.execute(stmt)
-    session.commit()
+    await session.execute(stmt)
+    await session.commit()
     return "edited"
 
 
-@skill_router.delete("/skills/{skill_name}")
-async def delete_skill(skill_name:str, session:Annotated[Session, Depends(get_db)]):
+@user_router.delete("/skills/{skill_name}")
+async def delete_skill(skill_name:str, session:Annotated[AsyncSession, Depends(get_db)]):
+    subq = select(Skill.id).where(Skill.name == skill_name).scalar_subquery()
+    progress_stmt = delete(Progress).where(Progress.skill_id == subq)
+    await session.execute(progress_stmt)
+    await session.commit()
+
     stmt = delete(Skill).where(Skill.name == skill_name)
-    session.execute(stmt)
-    session.commit()
+    await session.execute(stmt)
+    await session.commit()
     return "deleted"
+
+@user_router.get("/skills/graph")
+async def get_graph(session:Annotated[AsyncSession, Depends(get_db)]):
+    ParentSkill = aliased(Skill)
+    ChildSkill = aliased(Skill)
+
+    stmt = (
+        select(
+            Relation,
+            ParentSkill.name.label("parent_name"),
+            ChildSkill.name.label("child_name"),
+        )
+        .join(ParentSkill, Relation.parent_skill_id == ParentSkill.id)
+        .join(ChildSkill, Relation.child_skill_id == ChildSkill.id)
+    )
+
+    result = await session.execute(stmt)
+
+    response = []
+
+    for row in result:
+        response.append({
+            "parent": row.parent_name,
+            "child": row.child_name,
+        })
+
+    return response
+
+
+async def insert_relations(skills:list[str], skills_id:dict[str, int]):
+    relations = await build_relations(skills)
+    edges = relations["edges"]
+    stmt_insert = insert(Relation)
+
+    async with SessionLocal() as session:
+        for edge in edges:
+            parent = edge["parent"]
+            child = edge["child"]
+            parent_id = skills_id[parent]
+            child_id = skills_id[child]
+            stmt = stmt_insert.values(
+                parent_skill_id=parent_id,
+                child_skill_id=child_id
+                )
+            await session.execute(stmt)
+            await session.commit()
+    
