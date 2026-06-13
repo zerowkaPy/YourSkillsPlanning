@@ -9,7 +9,9 @@ from aiogram.fsm.context import FSMContext
 from envs import BOT_TOKEN
 from routers import user_router
 from kb import menu_kb
-import skills_crud
+from smart_keyboard import SmartKeyboard
+import skills
+import relations
 
 
 
@@ -20,11 +22,12 @@ dp.include_router(user_router)
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.reply("Вітаю", reply_markup=menu_kb)
+    await message.reply("""Вітаємо в YourSkillsPlanning!
+                        Цей бот створений для зручного планування свого навчання: створення скілів, """
+                        """керування прогресом та перегляд аналітики""", reply_markup=menu_kb)
 
 
-
-bot = Bot(BOT_TOKEN)
+bot = Bot(BOT_TOKEN) # type: ignore
 
 async def main():
     logging.basicConfig(level=logging.INFO)

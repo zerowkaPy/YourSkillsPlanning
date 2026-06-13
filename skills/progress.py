@@ -11,12 +11,13 @@ from route.routers import user_router
 
 @user_router.get("/progress/")
 async def global_progress(session:Annotated[AsyncSession, Depends(get_db)]):
-    stmt = select(Progress, Skill.name).join(Skill, Progress.skill_id==Skill.id)
+    stmt = select(Progress, Skill.id, Skill.name).join(Skill, Progress.skill_id==Skill.id)
     res = await session.execute(stmt)
     response = []
-    for progress, skill_name in res.all():
+    for progress, skill_id, skill_name in res.all():
         response.append(
-            {
+            {   
+                "id":skill_id,
                 "name":skill_name,
                 "created_at":progress.created_at,
                 "total_time":progress.total_time

@@ -1,8 +1,9 @@
 from typing import Annotated
 import asyncio
 
-from fastapi import Depends, Query, Path
-from sqlalchemy import Result, select, insert, delete, update
+from fastapi import Depends, Query, Path, Request
+from sqlalchemy import Result, select, delete, update, or_
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,14 +12,20 @@ from db.connect import get_db, SessionLocal
 from models.skill import SkillModel
 from route.routers import user_router
 from skills.relations import build_relations
+from security import security
+
 
 @user_router.get("/skills/")
-async def get_all(session:Annotated[AsyncSession, Depends(get_db)]):
+async def get_all(session:Annotated[AsyncSession, Depends(get_db)], only_names:bool = False):
     stmt = select(Skill)
     result:Result[tuple[Skill]] = await session.execute(stmt)
     response = []
-    skills = []
-    skills_id = {}
+    if only_names:
+        for row in result:
+            skill = row[0]
+            response.append(skill.name)
+        return response
+    
     for row in result:
         skill = row[0]
         response.append(
@@ -28,15 +35,15 @@ async def get_all(session:Annotated[AsyncSession, Depends(get_db)]):
             "weight":skill.weight
             }
         )
-        skills.append(skill.name)
-        skills_id[skill.name] = skill.id
-        
-    asyncio.create_task(insert_relations(skills, skills_id))
     return response
 
 @user_router.post("/skills/")
-async def create_skill(skill:SkillModel, session:Annotated[AsyncSession, Depends(get_db)]):
+async def create_skill(
+    skill:SkillModel,
+    session:Annotated[AsyncSession, Depends(get_db)],
+    request:Request):
     skill_stmt = insert(Skill).values(
+        user_id=request.state.user_id,
         name=skill.name,
         desc=skill.desc,
         weight=skill.weight).returning(Skill.id)
@@ -45,7 +52,10 @@ async def create_skill(skill:SkillModel, session:Annotated[AsyncSession, Depends
     await session.commit()
 
     skill_id = result.scalar_one()
-    progress_stmt = insert(Progress).values(skill_id=skill_id)
+    progress_stmt = insert(Progress).values(
+        user_id=request.state.user_id,
+        skill_id=skill_id
+        )
     await session.execute(progress_stmt)
     await session.commit()
 
@@ -81,13 +91,32 @@ async def delete_skill(skill_name:str, session:Annotated[AsyncSession, Depends(g
     await session.execute(progress_stmt)
     await session.commit()
 
+    relat_stmt = delete(Relation).where(
+        or_(
+            Relation.child_skill_id == subq,
+            Relation.parent_skill_id == subq)
+    )
+    await session.execute(relat_stmt)
+    await session.commit()
+
     stmt = delete(Skill).where(Skill.name == skill_name)
     await session.execute(stmt)
     await session.commit()
-    return "deleted"
+
+
 
 @user_router.get("/skills/graph")
 async def get_graph(session:Annotated[AsyncSession, Depends(get_db)]):
+    stmt = select(Skill)
+    result:Result[tuple[Skill]] = await session.execute(stmt)
+    skills = []
+    skills_id = {}
+    for row in result:
+        skill = row[0]
+        skills.append(skill.name)
+        skills_id[skill.name] = skill.id
+    await insert_relations(skills, skills_id)
+
     ParentSkill = aliased(Skill)
     ChildSkill = aliased(Skill)
 
@@ -101,16 +130,14 @@ async def get_graph(session:Annotated[AsyncSession, Depends(get_db)]):
         .join(ChildSkill, Relation.child_skill_id == ChildSkill.id)
     )
 
-    result = await session.execute(stmt)
+    result1 = await session.execute(stmt)
 
     response = []
-
-    for row in result:
+    for row in result1:
         response.append({
             "parent": row.parent_name,
             "child": row.child_name,
         })
-
     return response
 
 
@@ -128,7 +155,7 @@ async def insert_relations(skills:list[str], skills_id:dict[str, int]):
             stmt = stmt_insert.values(
                 parent_skill_id=parent_id,
                 child_skill_id=child_id
-                )
+                ).on_conflict_do_nothing()
             await session.execute(stmt)
             await session.commit()
     
