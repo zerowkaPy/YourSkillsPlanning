@@ -10,3 +10,4 @@ if not check_env:
 DB_URL = os.getenv("DB_URL")
 API_KEY = os.getenv("Gemini_Api_Key")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+MY_API_KEY = os.getenv("MY_API_KEY")

@@ -8,3 +8,4 @@ if not check_env:
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_URL = os.getenv("API_URL")
+MY_API_KEY = os.getenv("MY_API_KEY")

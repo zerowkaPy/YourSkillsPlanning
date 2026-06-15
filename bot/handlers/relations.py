@@ -7,15 +7,20 @@ from graphviz import Digraph
 from pathlib import Path
 from aiogram.types import BufferedInputFile
 
-from routers import user_router
+from routers.routers import user_router
 from envs import API_URL
-from kb import menu_kb
-from smart_keyboard import SmartKeyboard
+from kb.user_kb import menu_kb
+from kb.smart_keyboard import SmartKeyboard
+
+assert API_URL is not None
 
 @user_router.callback_query(F.data == "graph")
-async def build_relations(cb:CallbackQuery):
+async def build_relations(cb:CallbackQuery, bot_header:dict):
+    bot_header["telegram-id"] = str(cb.from_user.id)
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(API_URL+"/skills/graph")
+        response = await client.get(
+            API_URL+"/skills/graph",
+            headers=bot_header)
     relations:list[tuple[str,str]] = response.json()
     print(relations)
     graph = Digraph()

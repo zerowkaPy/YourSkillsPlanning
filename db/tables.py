@@ -1,6 +1,6 @@
 from sqlalchemy import VARCHAR, Integer, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 class Base(DeclarativeBase):
@@ -10,9 +10,10 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
     user_id:Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(VARCHAR(50), unique=True)
-    email: Mapped[str] = mapped_column(VARCHAR(255), unique=True)
-    password_hash: Mapped[str] = mapped_column(VARCHAR(255))
+    username:Mapped[str] = mapped_column(VARCHAR(50), unique=True)
+    email:Mapped[str] = mapped_column(VARCHAR(255), unique=True)
+    password_hash:Mapped[str] = mapped_column(VARCHAR(255))
+    telegram_id:Mapped[int] = mapped_column(nullable=True)
 
 
 class Skill(Base):
@@ -59,8 +60,20 @@ class Progress(Base):
         primary_key=True)
     created_at:Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(ZoneInfo("Europe/Kyiv")))
+        default=lambda: datetime.now(ZoneInfo("UTC")))
     total_time:Mapped[int] = mapped_column(Integer(), default=0)
 
     def __repr__(self):
         return f"Progress(skill_id={self.skill_id}, created_at={self.created_at}, total_time={self.total_time})"
+    
+
+class TGLinks(Base):
+    __tablename__ = "tg_links"
+    id:Mapped[int] = mapped_column(primary_key=True)
+    user_id:Mapped[int] = mapped_column(ForeignKey("users.user_id"))
+    token:Mapped[str] = mapped_column(VARCHAR(128))
+    expires_at:Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(ZoneInfo("UTC")) + timedelta(minutes=10.0))
+    used:Mapped[bool] = mapped_column(default=False)
+

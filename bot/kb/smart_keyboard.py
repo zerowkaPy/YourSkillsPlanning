@@ -1,5 +1,4 @@
-
-from aiogram.types import InlineKeyboardButton
+from aiogram.types import  InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types.user import User
 
@@ -16,12 +15,26 @@ class SmartKeyboard:
         cls._instance[user_id] = instance
         return instance
 
-    def __init__(self, user_id):
+    def __init__(self, from_user:User):
         if hasattr(self, "_initialized"):
             return
-        self._user_id = str(user_id)
+        self._user_id = str(from_user.id)
+        self._adjust = None
+        self._buttons = None
+        self._page_num = None
+        self._rest = None
+        self._rows_num = None
+        self._next_button = None
+        self._back_button = None
+        self._home_button = None
+        self._pages = {}
+        self._pages_prop = {}
+        self._count = 1
+
+        self._kb_init = True
+
         self._initialized = True  # флаг ініціалізації екземпляру
-        self._kb_init = False #флаг ініціалізації клавіатури
+        # self._kb_init = False #флаг ініціалізації клавіатури
 
     def init_keyboard(self):
         self._adjust = None
@@ -37,6 +50,13 @@ class SmartKeyboard:
         self._count = 1
 
         self._kb_init = True
+
+    @classmethod
+    def check_user(cls, from_user:User):
+        user_id = str(from_user.id)
+        if user_id in cls._instance:
+            return True
+        return False
 
     @classmethod
     def delete_user(cls, from_user:User):
@@ -90,7 +110,7 @@ class SmartKeyboard:
                 self._pages_prop[str(page)] = "bn"
 
 
-    def add_butons(self, buttons:list[str]):
+    def add_buttons(self, buttons:list[str]):
         if not self._kb_init:
             raise RuntimeError("you must execute init_keyboard before call add_butons")
         if type(buttons) != list:
@@ -99,7 +119,7 @@ class SmartKeyboard:
             raise ValueError("buttons parameter must contain at least 1 string")
         self._buttons = buttons
 
-        self._kb_init = False
+        # self._kb_init = False
 
         
     def get_keyboard(self):
@@ -164,4 +184,40 @@ class SmartKeyboard:
         if self._home_button:
                 builder.add(InlineKeyboardButton(text=self._home_button, callback_data=self._home_button))
                 builder.adjust(*adjust, 1)
+        return builder.as_markup()
+
+    
+
+    def current_keyboard(self):
+        builder = InlineKeyboardBuilder()
+        count = self._count - 1
+        page = self._pages_prop[str(count)]
+        if page == 'none':
+            for button in self._pages[str(count)]:
+                builder.add(InlineKeyboardButton(text=button, callback_data=button))
+            builder.adjust(*self._adjust)
+            adjust = [*self._adjust]
+        elif page == 'n':
+            for button in self._pages[str(count)]:
+                builder.add(InlineKeyboardButton(text=button, callback_data=button))
+            builder.add(InlineKeyboardButton(text=self._next_button, callback_data=self._next_button))
+            builder.adjust(*self._adjust, 1)
+            adjust = [*self._adjust, 1]
+        elif page == 'bn':
+            for button in self._pages[str(count)]:
+                builder.add(InlineKeyboardButton(text=button, callback_data=button))
+            builder.add(InlineKeyboardButton(text=self._back_button, callback_data=self._back_button))
+            builder.add(InlineKeyboardButton(text=self._next_button, callback_data=self._next_button))
+            builder.adjust(*self._adjust, 2)
+            adjust = [*self._adjust, 2]
+        elif page == 'b':
+            for button in self._pages[str(count)]:
+                builder.add(InlineKeyboardButton(text=button, callback_data=button))
+            builder.add(InlineKeyboardButton(text=self._back_button, callback_data=self._back_button))
+            builder.adjust(*self._adjust, 1)
+            adjust = [*self._adjust, 1]
+
+        if self._home_button:
+            builder.add(InlineKeyboardButton(text=self._home_button, callback_data=self._home_button))
+            builder.adjust(*adjust, 1)
         return builder.as_markup()
