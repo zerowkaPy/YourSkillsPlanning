@@ -1,5 +1,5 @@
 from typing import Annotated
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 
 class CredentModel(BaseModel):
     username:Annotated[str, Field(max_length=50)]

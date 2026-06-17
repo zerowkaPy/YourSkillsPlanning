@@ -1,7 +1,7 @@
 from aiogram.types import  InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types.user import User
-
+from copy import deepcopy
 
 
 class SmartKeyboard:
@@ -31,25 +31,25 @@ class SmartKeyboard:
         self._pages_prop = {}
         self._count = 1
 
-        self._kb_init = True
+        # self._kb_init = True
 
         self._initialized = True  # флаг ініціалізації екземпляру
         # self._kb_init = False #флаг ініціалізації клавіатури
 
-    def init_keyboard(self):
-        self._adjust = None
-        self._buttons = None
-        self._page_num = None
-        self._rest = None
-        self._rows_num = None
-        self._next_button = None
-        self._back_button = None
-        self._home_button = None
-        self._pages:dict[str, list[str]] = {}
-        self._pages_prop = {}
-        self._count = 1
+    # def init_keyboard(self):
+    #     self._adjust = None
+    #     self._buttons = None
+    #     self._page_num = None
+    #     self._rest = None
+    #     self._rows_num = None
+    #     self._next_button = None
+    #     self._back_button = None
+    #     self._home_button = None
+    #     self._pages:dict[str, list[str]] = {}
+    #     self._pages_prop = {}
+    #     self._count = 1
 
-        self._kb_init = True
+    #     self._kb_init = True
 
     @classmethod
     def check_user(cls, from_user:User):
@@ -85,16 +85,16 @@ class SmartKeyboard:
         self._back_button = back_button
         self._home_button = home_button
         self._kb_prop()
+        buttons = self._buttons[:]
 
         for page in range(self._page_num):
             page +=1
-            self._pages[str(page)] = [button for button in self._buttons[:self._rows_num]]
-            self._buttons = self._buttons[self._rows_num:]
+            self._pages[str(page)] = [button for button in buttons[:self._rows_num]]
+            buttons = buttons[self._rows_num:]
             self._last_page = page
 
         if self._rest:
-            self._pages[str(self._last_page+1)] = [button for button in self._buttons]
-            self._buttons.clear()
+            self._pages[str(self._last_page+1)] = [button for button in buttons]
 
         for page in range(self._page_num):
             page+=1
@@ -109,10 +109,7 @@ class SmartKeyboard:
             else:
                 self._pages_prop[str(page)] = "bn"
 
-
     def add_buttons(self, buttons:list[str]):
-        if not self._kb_init:
-            raise RuntimeError("you must execute init_keyboard before call add_butons")
         if type(buttons) != list:
             raise TypeError("buttons parameter must be a list of strings")
         if len(buttons) == 0:
@@ -127,11 +124,14 @@ class SmartKeyboard:
             if button in buttons:
                 buttons.remove(button)
                 removed = True
+        self._buttons.remove(button)
         if not removed:
             raise RuntimeWarning("Button was not delete because it's not in lists of buttons")
         else:
+            if not self._buttons:
+                return
             self.set_prop(self._adjust,
-                        self._rows_num,
+                        self._rows_num - 1,
                         self._next_button,
                         self._back_button,
                         self._home_button)

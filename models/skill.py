@@ -1,5 +1,5 @@
 from typing import Annotated
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 
 class SkillModel(BaseModel):
     name:Annotated[str|None, Field(max_length=35)] = None

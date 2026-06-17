@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram import F
 import httpx
+from httpx import AsyncClient
 
 
 from routers.routers import user_router
@@ -22,29 +23,27 @@ assert API_URL is not None
 assert MY_API_KEY is not None
 
 
-async def get_names(bot_headers:dict[str, Any]|None = None) -> list[str]:
+async def get_names(bot_headers:dict[str, Any]|None = None) -> list[dict[str, Any]]:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             API_URL+"/skills/?only_names=true",
-            headers=bot_headers)
-    skills:list[str] = response.json()
-    return skills
-
-
-async def get_skills(bot_headers:dict[str, Any]|None = None) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            API_URL+"/skills/",
             headers=bot_headers)
     skills:list[dict[str, Any]] = response.json()
     return skills
 
 
-async def get_progress(bot_headers:dict[str, Any]|None = None) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            API_URL+"/progress/",
-            headers=bot_headers)
+async def get_skills(client:AsyncClient, bot_headers:dict[str, Any]|None = None) -> list[dict[str, Any]]:
+    response = await client.get(
+        API_URL+"/skills/",
+        headers=bot_headers)
+    skills:list[dict[str, Any]] = response.json()
+    return skills
+
+
+async def get_progress(client:AsyncClient, bot_headers:dict[str, Any]|None = None) -> list[dict[str, Any]]:
+    response = await client.get(
+        API_URL+"/progress/",
+        headers=bot_headers)
     progress:list[dict[str, Any]] = response.json()
     return progress
 

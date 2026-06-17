@@ -6,9 +6,12 @@ from fastapi import FastAPI
 
 import constants
 from route.routers import user_router
-from middlwares.auth import AuthMiddleware
-from handlers import skills_handlers, progress_handlers, graph_handlers
-import authorization
+from middlwares.auth import AuthMiddleware 
+from handlers import (
+    skills_handlers, progress_handlers,
+    graph_handlers, authorization_handlers,
+    notes_handlers
+    )
 
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)

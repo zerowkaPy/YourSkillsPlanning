@@ -67,6 +67,20 @@ class Progress(Base):
         return f"Progress(skill_id={self.skill_id}, created_at={self.created_at}, total_time={self.total_time})"
     
 
+class Note(Base):
+    __tablename__ = "notes"
+    __table_args__ = (
+        UniqueConstraint("skill_id", "text"),
+    )
+    id:Mapped[int] = mapped_column(primary_key=True)
+    skill_id:Mapped[int] = mapped_column(
+        ForeignKey("skills.id"))
+    text:Mapped[str] = mapped_column()
+    created_at:Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(ZoneInfo("UTC")))
+
+
 class TGLinks(Base):
     __tablename__ = "tg_links"
     id:Mapped[int] = mapped_column(primary_key=True)
@@ -76,4 +90,5 @@ class TGLinks(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(ZoneInfo("UTC")) + timedelta(minutes=10.0))
     used:Mapped[bool] = mapped_column(default=False)
+
 
