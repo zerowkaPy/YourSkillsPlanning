@@ -1,4 +1,5 @@
 .env
+constants.py
 che.py
 try
 sqlal_learn.py

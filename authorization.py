@@ -4,15 +4,15 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 
 from fastapi import Depends, HTTPException, Response, Request, Header, Path
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from route.routers import user_router
 from models.credent import CredentModel, LoginData, LinkData
-from db.tables import User, Skill, TGLinks
+from db.tables import User, TGLinks
 from db.connect import get_db
-from envs import MY_API_KEY
+from constants import MY_API_KEY
 from security import security, config, pwd_context
 
 

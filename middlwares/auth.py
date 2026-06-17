@@ -4,7 +4,7 @@ from jose import jwt, JWTError
 from fastapi.responses import JSONResponse
 
 
-from envs import JWT_SECRET_KEY, MY_API_KEY
+from constants import JWT_SECRET_KEY, MY_API_KEY
 assert JWT_SECRET_KEY is not None
 assert MY_API_KEY is not None
 

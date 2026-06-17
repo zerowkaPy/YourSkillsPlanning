@@ -13,15 +13,15 @@ from kb.user_kb import menu_kb
 from kb.smart_keyboard import SmartKeyboard
 import handlers.skills as skills
 import handlers.relations as relations
-from greeting import TEXT
+from bigtext.greeting import TEXT
 
 
 
 dp = Dispatcher()
 dp.include_router(user_router)
 
-header = {"x-api-key":MY_API_KEY}
-dp["bot_header"] = header
+headers = {"x-api-key":MY_API_KEY}
+dp["bot_headers"] = headers
 
 @dp.message(CommandStart())
 async def start(message: Message, command:CommandObject):

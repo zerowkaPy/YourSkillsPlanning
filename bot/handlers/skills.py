@@ -1,6 +1,7 @@
 from json import loads
 from datetime import datetime, timedelta
 import logging
+from typing import Any
 
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -10,24 +11,23 @@ import httpx
 
 from routers.routers import user_router
 from envs import API_URL, MY_API_KEY
-from kb.user_kb import menu_kb, skill_edit_kb
+from kb.user_kb import menu_kb, skill_edit_kb, edit_more_kb
 from kb.smart_keyboard import SmartKeyboard
 from filters.filters import StateFilter
 from states.states import AddSkillState
-
+from handlers.requests.skill_requests import (
+                get_names, get_skills, get_progress,
+                do_increament, do_decrement,
+                delete_skill
+                )
 
 assert API_URL is not None
 assert MY_API_KEY is not None
 
 @user_router.callback_query(F.data == "my_skills")
-async def my_skills(cb:CallbackQuery, state:FSMContext, bot_header:dict):
-    bot_header["telegram-id"] = str(cb.from_user.id)
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            API_URL+"/skills/?only_names=true",
-            headers=bot_header)
-    raw = response.content
-    skills:list[str] = loads(raw)
+async def my_skills(cb:CallbackQuery, state:FSMContext, bot_headers:dict[str, Any]):
+    bot_headers["telegram-id"] = str(cb.from_user.id)
+    skills = await get_names(bot_headers)
     kb = SmartKeyboard(cb.from_user)
     kb.init_keyboard()
     kb.add_buttons(skills)
@@ -53,34 +53,87 @@ async def previous_page(cb:CallbackQuery):
 
 @user_router.callback_query(F.data == "Меню")
 async def to_menu(cb:CallbackQuery, state:FSMContext):
-    user = cb.from_user
-    kb = SmartKeyboard(user)
-    kb.delete_user(user)
+    SmartKeyboard.delete_user(cb.from_user)
     await state.clear()
     await cb.message.answer("YSP переніс вас на головну", reply_markup=menu_kb)
     await cb.message.delete()
 
-@user_router.callback_query(F.data == "back_to_skills")
+@user_router.callback_query(StateFilter("skill_overview"), F.data == "back_to_skills")
 async def backto_skills(cb:CallbackQuery, state:FSMContext):
     kb = SmartKeyboard(cb.from_user)
+    await state.set_state("get_skill")
     await cb.message.answer("YSP зібрав всі ваші скіли:", reply_markup=kb.current_keyboard())
     await cb.message.delete()
 
-@user_router.callback_query(F.data == "increament")
-async def plus_progress(cb:CallbackQuery, state:FSMContext, bot_header:dict):
-    bot_header["telegram-id"] = str(cb.from_user.id)
+
+@user_router.callback_query(StateFilter("get_skill"))
+async def skill_overview(cb:CallbackQuery, state:FSMContext, bot_headers:dict[str, Any]):
+    skill_name:str|None = cb.data
+    user_id = cb.from_user.id
+    bot_headers["telegram-id"] = str(cb.from_user.id)
+    skills = await get_skills(bot_headers)
+    progress = await get_progress(bot_headers)
+    logging.info(skills)
+    logging.info(progress)
+    if not skills or not progress:
+        return logging.error("Skills or progress have not imported")
+    
+    for skill in skills:
+        if skill["name"] == skill_name:
+            desc = skill.get("desc")
+            weight = skill.get("weight")
+    
+    for progress in progress:
+        if progress["name"] == skill_name:
+            created_at = progress.get("created_at")
+            total_time = progress.get("total_time")
+    created_at = (datetime.fromisoformat(created_at) + timedelta(hours=3)).strftime("%H:%M  %d.%m.%Y")
+    await state.update_data({
+        str(user_id):{
+            "name":skill_name,
+            "desc":desc,
+            "weight":weight,
+            "created_at":created_at,
+            "total_time":total_time
+                            }
+                    })
+    await state.set_state("skill_overview")
+    await cb.message.answer(
+            f"""Інформація по {skill_name}:
+Створено: {created_at}
+Рівень скіла: {total_time}
+Важливість: {weight}
+Опис: {desc}
+            """,
+            reply_markup=skill_edit_kb.as_markup())
+    await cb.message.delete()
+
+
+@user_router.callback_query(StateFilter("skill_overview"), F.data == "edit")
+async def edit_name(cb:CallbackQuery, state:FSMContext):
+    await state.set_state("skill_editing")
+    await cb.message.answer("Оберіть параметр який бажаєте змінити",
+                               reply_markup=edit_more_kb.as_markup())
+    await cb.message.delete()
+
+
+@user_router.callback_query(StateFilter("skill_overview"), F.data == "increament")
+async def plus_progress(cb:CallbackQuery, state:FSMContext, bot_headers:dict):
+    user_id = cb.from_user.id
     data = await state.get_data()
-    skill:dict = data.get(cb.from_user.id)
+    skill = data.get(str(user_id))
+    
+    if not skill:
+        return logging.error("Skill doesn't exist in userdata")
+    
     skill_name = skill["name"]
-    async with httpx.AsyncClient() as client:
-        await client.patch(
-            API_URL+f"/progress/{skill_name}?add=true",
-            headers=bot_header)
-    await state.set_state("get_skill")
     created_at = skill["created_at"]
     total_time = skill["total_time"]
+
+    bot_headers["telegram-id"] = str(cb.from_user.id)
+    await do_increament(skill_name, bot_headers)
     await state.update_data({
-        cb.from_user.id:{
+        str(user_id):{
             "name":skill_name,
             "created_at":created_at,
             "total_time":total_time + 1
@@ -93,88 +146,55 @@ f"""Інформація по {skill_name}:
 """, reply_markup=skill_edit_kb.as_markup())
     
 
-@user_router.callback_query(F.data == "decrement")
-async def minus_progress(cb:CallbackQuery, state:FSMContext, bot_header:dict):
-    bot_header["telegram-id"] = str(cb.from_user.id)
+@user_router.callback_query(StateFilter("skill_overview"), F.data == "decrement")
+async def minus_progress(cb:CallbackQuery, state:FSMContext, bot_headers:dict):
+    user_id = cb.from_user.id
     data = await state.get_data()
-    skill:dict = data.get(cb.from_user.id)
+    skill = data.get(str(user_id))
+    
+    if not skill:
+        return logging.error("Skill doesn't exist in userdata")
+    
     skill_name = skill["name"]
-    async with httpx.AsyncClient() as client:
-        await client.patch(
-            API_URL+f"/progress/{skill_name}?reduce=true",
-            headers=bot_header)
-    await state.set_state("get_skill")
     created_at = skill["created_at"]
     total_time = skill["total_time"]
+
+    bot_headers["telegram-id"] = str(cb.from_user.id)
+    await do_decrement(skill_name, bot_headers)
     await state.update_data({
-        cb.from_user.id:{
+        str(user_id):{
             "name":skill_name,
             "created_at":created_at,
-            "total_time":total_time - 1
+            "total_time":total_time + 1
                             }
                     })
     await cb.message.edit_text(
 f"""Інформація по {skill_name}:
 Створено: {created_at}
-Прогрес: {total_time- 1}
+Прогрес: {total_time + -1}
 """, reply_markup=skill_edit_kb.as_markup())
 
 
-@user_router.callback_query(F.data == "del_skill")
-async def delete_skill(cb:CallbackQuery, state:FSMContext, bot_header:dict):
-    bot_header["telegram-id"] = str(cb.from_user.id)
+@user_router.callback_query(StateFilter("skill_overview"), F.data == "del_skill")
+async def remove_skill(cb:CallbackQuery, state:FSMContext, bot_headers:dict):
+    user_id = cb.from_user.id
     data = await state.get_data()
-    skill:dict = data.get(cb.from_user.id)
-    skill_name = skill["name"]
-    print(skill_name)
-    async with httpx.AsyncClient() as client:
-        await client.delete(
-            API_URL+f"/skills/{skill_name}",
-            headers=bot_header)
+    skill:dict|None = data.get(str(user_id))
     
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            API_URL+"/skills/?only_names=true",
-            headers=bot_header)
-    raw = response.content
-    skills:list[str] = loads(raw)
-    SmartKeyboard.delete_user(cb.from_user)
+    if not skill:
+        return logging.error("Skill doesn't exist in userdata")
+    
+    skill_name:str|None = skill.get("name")
+    bot_headers["telegram-id"] = str(cb.from_user.id)
+    # await delete_skill(skill_name, bot_headers)
     kb = SmartKeyboard(cb.from_user)
-    kb.init_keyboard()
-    kb.add_buttons(skills)
-    kb.set_prop([2,2,2], len(skills), next_button="➡️", back_button="⬅️", home_button="Меню")
-    await cb.message.answer("Скіл видалено!", reply_markup=kb.get_keyboard())
+    kb.delete_button(skill_name)
+    await state.set_state("get_skill")
+    await cb.message.answer("Скіл видалено!", reply_markup=kb.current_keyboard())
     await cb.message.delete()
 
 
-@user_router.callback_query(StateFilter("get_skill"))
-async def manage_skill(cb:CallbackQuery, state:FSMContext, bot_header:dict):
-    skill:str|None = cb.data
-    bot_header["telegram-id"] = str(cb.from_user.id)
-    async with httpx.AsyncClient() as client:
-        response1 = await client.get(
-            API_URL+"/progress/",
-            headers=bot_header)
-    progres:list[dict[str,str]] = loads(response1.content)
-    for one_skill in progres:
-        if one_skill["name"] == skill:
-            created_at = one_skill["created_at"]
-            total_time = one_skill["total_time"]
-        
-    created_at = (datetime.fromisoformat(created_at) + timedelta(hours=3)).strftime("%d.%m.%Y, %H:%M")
-    await cb.message.answer(
-f"""Інформація по {skill}:
-Створено: {created_at}
-Прогрес: {total_time}
-""", reply_markup=skill_edit_kb.as_markup())
-    await state.update_data({
-        cb.from_user.id:{
-            "name":skill,
-            "created_at":created_at,
-            "total_time":total_time
-                            }
-                    })
-    await cb.message.delete()
+
 
 
 

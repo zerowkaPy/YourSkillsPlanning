@@ -45,7 +45,7 @@ class SmartKeyboard:
         self._next_button = None
         self._back_button = None
         self._home_button = None
-        self._pages = {}
+        self._pages:dict[str, list[str]] = {}
         self._pages_prop = {}
         self._count = 1
 
@@ -76,7 +76,7 @@ class SmartKeyboard:
         else:
             return False
 
-    def set_prop(self, adjust:list[int], rows_num:int, next_button:str = "next", back_button:str = "back", home_button :str = None):
+    def set_prop(self, adjust:list[int], rows_num:int, next_button:str = "next", back_button:str = "back", home_button :str|None = None):
         if not self._buttons:
             raise SyntaxError("you must first execute 'add_buttons'")
         self._adjust = adjust
@@ -120,6 +120,22 @@ class SmartKeyboard:
         self._buttons = buttons
 
         # self._kb_init = False
+
+    def delete_button(self, button:str):
+        removed = False
+        for buttons in self._pages.values():
+            if button in buttons:
+                buttons.remove(button)
+                removed = True
+        if not removed:
+            raise RuntimeWarning("Button was not delete because it's not in lists of buttons")
+        else:
+            self.set_prop(self._adjust,
+                        self._rows_num,
+                        self._next_button,
+                        self._back_button,
+                        self._home_button)
+            
 
         
     def get_keyboard(self):

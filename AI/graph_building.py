@@ -1,8 +1,7 @@
 from google import genai
 import json
-import asyncio
 
-from envs import API_KEY
+from constants import API_KEY
 
 client = genai.Client(api_key=API_KEY)
 
@@ -101,9 +100,3 @@ def _relation_to_dict(text:str) -> dict[str,list[dict[str, str]]]:
 
     relations = json.loads(text)
     return relations
-
-# async def main():
-#     result = await build_relations(["english", "FastAPI", "Python"])
-#     print(result)
-# if __name__ == "__main__":
-#     asyncio.run(main())

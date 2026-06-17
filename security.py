@@ -4,7 +4,7 @@ from passlib.context import CryptContext
 
 from db.tables import User
 from db.connect import  SessionLocal
-from envs import JWT_SECRET_KEY
+from constants import JWT_SECRET_KEY
 
 config = AuthXConfig()
 config.JWT_SECRET_KEY = JWT_SECRET_KEY
